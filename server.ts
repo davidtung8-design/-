@@ -98,12 +98,40 @@ async function startServer() {
     res.send(data.content);
   });
 
-  console.log('Using Vite middleware for all requests...');
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
-  });
-  app.use(vite.middlewares);
+  console.log('Setting up middleware...');
+  
+  const distPath = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(distPath)) {
+    console.log('Serving from static dist folder (Production Optimized)...');
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      // Allow API routes to pass through
+      if (req.path.startsWith('/api/')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    console.log('Using Vite middleware for development (Dist folder not found)...');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+    
+    // Explicitly serve index.html for non-API routes when using Vite middleware mode
+    app.use('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      if (url.startsWith('/api/')) return next();
+      
+      try {
+        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        console.error('Vite transform error:', e);
+        res.status(500).end(e instanceof Error ? e.stack : String(e));
+      }
+    });
+  }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running at http://0.0.0.0:${PORT}`);
