@@ -2,7 +2,7 @@ import React from 'react';
 import { ThemeKey, ThemeConfig } from '../types';
 import { THEMES } from '../constants';
 import { cn } from '../lib/utils';
-import { Moon, Trash2, Phone, Github, Award, History, Zap, Smartphone, Share } from 'lucide-react';
+import { Moon, Trash2, Phone, Github, Award, History, Zap } from 'lucide-react';
 import { DTIcon } from '../components/DTIcon';
 import { motion } from 'motion/react';
 
@@ -25,38 +25,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   return (
     <div className="animate-fadeIn space-y-6">
-      {/* PWA / Native App Instructions */}
-      <div className={cn(
-        "bento-card p-6 border-l-4 border-l-blue-500 relative overflow-hidden",
-        isDarkMode ? "bg-blue-500/5" : "bg-blue-50"
-      )}>
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-blue-500 text-white rounded-2xl">
-            <Smartphone size={20} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-black uppercase tracking-widest text-blue-500">Enable Native Matrix Interface</h3>
-            <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-              为了获得最佳体验（包括直接读取通讯录功能），请将此应用“安装”到您的主屏幕：
-            </p>
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 flex items-center justify-center bg-slate-800 rounded-full text-[10px] font-bold text-white">1</div>
-                <p className="text-[10px] text-slate-400">点击 Safari 浏览器底部的 <span className="inline-flex items-center p-1 bg-white/10 rounded ml-1 mr-1"><Share size={10} /></span> 按钮</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 flex items-center justify-center bg-slate-800 rounded-full text-[10px] font-bold text-white">2</div>
-                <p className="text-[10px] text-slate-400">在菜单中向下滑动，选择 <span className="font-bold text-white">“添加到主屏幕” (Add to Home Screen)</span></p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 flex items-center justify-center bg-slate-800 rounded-full text-[10px] font-bold text-white">3</div>
-                <p className="text-[10px] text-slate-400">从主屏幕打开 App，现在您可以穿透 iFrame 限制一键匹配好友。</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Profile Bento Card */}
       <div className="bento-card p-10 overflow-hidden relative group">
         <div className="absolute -bottom-10 -right-10 opacity-5 group-hover:scale-110 transition-transform duration-700">

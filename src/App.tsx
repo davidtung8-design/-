@@ -26,9 +26,6 @@ import { ActionPage3v6R } from './pages/ActionPage3v6R';
 import { SettingsPage } from './pages/SettingsPage';
 import { AwardsPage } from './pages/AwardsPage';
 
-import { useRegisterSW } from 'virtual:pwa-register/react';
-import { Share, Download, Smartphone } from 'lucide-react';
-
 // --- Default States ---
 const DEFAULT_MONTHLY: MonthlyRecord[] = [
   { m: "1月", a: 130000 },
@@ -77,30 +74,6 @@ const INITIAL_PERF: PerfData = {
 };
 
 export default function App() {
-  // PWA Service Worker registration
-  useRegisterSW({ 
-    onRegistered(r) { console.log('Matrix Kernel (SW) Registered:', r); },
-    onRegisterError(error) { console.error('Matrix Kernel Sync Error:', error); }
-  });
-
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstall = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') setInstallPrompt(null);
-  };
-
   // --- Navigation ---
   const [currentPage, setCurrentPage] = useState<'home' | 'perf' | 'list' | '3v6r' | 'awards' | 'settings'>('home');
   const [themeKey, setThemeKey] = useState<ThemeKey>('default');
@@ -1264,40 +1237,6 @@ export default function App() {
         />}
       </div>
       
-      {/* Toast Notification Component */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: 10, x: '-50%' }}
-            className={cn(
-              "fixed bottom-24 left-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border backdrop-blur-xl transition-all",
-              toast.type === 'success' ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" : "bg-red-500/20 border-red-500/50 text-red-400"
-            )}
-          >
-            <div className={cn("w-2 h-2 rounded-full animate-pulse", toast.type === 'success' ? "bg-emerald-500" : "bg-red-500")} />
-            <span className="text-[11px] font-bold uppercase tracking-widest">{toast.message}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* PWA Direct Install FAB (Floating Action Button) for Android/Supported desktop */}
-      <AnimatePresence>
-        {installPrompt && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            exit={{ opacity: 0, scale: 0.8, x: 20 }}
-            onClick={handleInstall}
-            className="fixed right-6 bottom-24 z-[80] p-4 bg-blue-600 text-white rounded-full shadow-2xl shadow-blue-600/30 hover:scale-110 active:scale-95 transition-all flex items-center gap-3 group"
-          >
-            <Download size={20} />
-            <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Install Native Matrix</span>
-          </motion.button>
-        )}
-      </AnimatePresence>
-
       {/* Footer System Status Bar */}
       <footer className={cn(
         "fixed bottom-0 left-0 right-0 backdrop-blur-md px-12 py-3 flex justify-between items-center text-[9px] uppercase tracking-[0.2em] border-t z-[60] transition-all duration-500",
