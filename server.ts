@@ -10,7 +10,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // In-memory store for temporary ICS files
   const calendarStore = new Map<string, { content: string; expiry: number }>();
@@ -28,7 +28,9 @@ async function startServer() {
   // API: Prepare Calendar
   app.post('/api/calendar/prepare', (req, res) => {
     const { icsContent } = req.body;
+    console.log('--- Calendar Prepare Request ---');
     if (!icsContent) {
+      console.error('Failure: Missing icsContent in request body');
       return res.status(400).json({ error: 'Missing content' });
     }
 
@@ -38,18 +40,22 @@ async function startServer() {
       expiry: Date.now() + 300000 // 5 minutes
     });
 
+    console.log(`Success: Stored calendar data with ID: ${id}`);
     res.json({ id });
   });
 
   // API: Download Calendar
   app.get('/api/calendar/download/:id.ics', (req, res) => {
     const { id } = req.params;
+    console.log(`--- Calendar Download Request: ${id} ---`);
     const data = calendarStore.get(id);
 
     if (!data) {
+      console.error(`Failure: Calendar ID ${id} not found or expired`);
       return res.status(404).send('Calendar file expired or not found.');
     }
 
+    console.log(`Success: Serving file for ID: ${id}`);
     res.setHeader('Content-Type', 'text/calendar;charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="david_tung_matrix.ics"`);
     res.send(data.content);

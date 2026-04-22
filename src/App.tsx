@@ -98,6 +98,12 @@ export default function App() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isReflectionArchiveOpen, setIsReflectionArchiveOpen] = useState(false);
   const [ambientSound, setAmbientSound] = useState(false);
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: "", visible: false });
+
+  const showToast = useCallback((message: string) => {
+    setToast({ message, visible: true });
+    setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+  }, []);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -491,22 +497,29 @@ export default function App() {
     
     try {
       showToast("正在准备同步当前周数据...");
+      
       const response = await fetch('/api/calendar/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ icsContent: icsString })
       });
       
-      if (!response.ok) throw new Error('API Sync Failed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Sync Failed: ${errorText}`);
+      }
       
       const { id } = await response.json();
+      
+      // Step 2: Download the file
       window.location.href = `/api/calendar/download/${id}.ics`;
+      showToast("✅ 已成功导出日历，请在手机上点击确认。");
       
     } catch (error) {
       console.error('Calendar sync error:', error);
-      alert('同步失败，请重试。');
+      alert('同步失败，请重试。' + (error instanceof Error ? error.message : ''));
     }
-  }, [events, baseDate, viewOffset]);
+  }, [events, baseDate, viewOffset, showToast]);
 
   // --- Rendering ---
   return (
@@ -515,6 +528,15 @@ export default function App() {
         fontFamily: '-apple-system, sans-serif' 
       } as React.CSSProperties}>
       
+      {/* Toast Notification */}
+      <div className={cn(
+        "fixed top-24 left-1/2 -translate-x-1/2 z-[1000] px-6 py-3 rounded-2xl backdrop-blur-xl border shadow-2xl transition-all duration-500 pointer-events-none",
+        isDarkMode ? "bg-slate-900/90 border-slate-700 text-white" : "bg-white/90 border-slate-200 text-slate-900",
+        toast.visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
+      )}>
+        <p className="text-xs font-bold uppercase tracking-widest">{toast.message}</p>
+      </div>
+
       <div className={cn(
         "mx-auto max-w-7xl px-4 sm:px-6 mb-24 transition-all duration-700",
         isFocusMode && "saturate-[0.5] brightness-[0.8] blur-[0.2px]"
