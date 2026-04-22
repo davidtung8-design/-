@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,12 +11,14 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Basic middleware
+  app.use(cors());
   app.use(express.json({ limit: '10mb' }));
 
   // In-memory store for temporary ICS files
   const calendarStore = new Map<string, { content: string; expiry: number }>();
 
-  // Cleanup old entries
+  // Cleanup old entries every minute
   setInterval(() => {
     const now = Date.now();
     for (const [id, data] of calendarStore.entries()) {
@@ -25,10 +28,20 @@ async function startServer() {
     }
   }, 60000);
 
+  // API: Health Check
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      uptime: process.uptime(),
+      storeSize: calendarStore.size
+    });
+  });
+
   // API: Prepare Calendar
   app.post('/api/calendar/prepare', (req, res) => {
     const { icsContent } = req.body;
     console.log('--- Calendar Prepare Request ---');
+    
     if (!icsContent) {
       console.error('Failure: Missing icsContent in request body');
       return res.status(400).json({ error: 'Missing content' });
@@ -40,24 +53,27 @@ async function startServer() {
       expiry: Date.now() + 300000 // 5 minutes
     });
 
-    console.log(`Success: Stored calendar data with ID: ${id}`);
+    console.log(`Success: Stored calendar data with ID: ${id}. Content size: ${icsContent.length} bytes`);
     res.json({ id });
   });
 
   // API: Download Calendar
-  app.get('/api/calendar/download/:id.ics', (req, res) => {
+  app.get('/api/calendar/download/:id', (req, res) => {
     const { id } = req.params;
     console.log(`--- Calendar Download Request: ${id} ---`);
-    const data = calendarStore.get(id);
+    
+    // Support both ID and ID.ics formats just in case
+    const cleanId = id.replace('.ics', '');
+    const data = calendarStore.get(cleanId);
 
     if (!data) {
-      console.error(`Failure: Calendar ID ${id} not found or expired`);
-      return res.status(404).send('Calendar file expired or not found.');
+      console.error(`Failure: Calendar ID ${cleanId} not found or expired`);
+      return res.status(404).json({ error: '日历链接已过期，请重试。' });
     }
 
-    console.log(`Success: Serving file for ID: ${id}`);
+    console.log(`Success: Serving file for ID: ${cleanId}`);
     res.setHeader('Content-Type', 'text/calendar;charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="david_tung_matrix.ics"`);
+    res.setHeader('Content-Disposition', 'attachment; filename="david_tung_matrix.ics"');
     res.send(data.content);
   });
 
@@ -69,7 +85,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production: serve static files
+    // Production: serve static files from dist
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -78,8 +94,11 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running at http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
