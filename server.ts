@@ -78,26 +78,13 @@ async function startServer() {
     res.send(data.content);
   });
 
-  const isProduction = process.env.NODE_ENV === 'production';
-  const distPath = path.join(process.cwd(), 'dist');
-  const hasDist = fs.existsSync(distPath);
-
-  // Vite middleware for development or if production build is missing
-  if (!isProduction || !hasDist) {
-    console.log('Using Vite middleware...');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Production: serve static files from dist
-    console.log('Serving from dist...');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  // Vite middleware for ALL environments to ensure dynamic serving
+  console.log('Using Vite middleware for all requests...');
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa',
+  });
+  app.use(vite.middlewares);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running at http://0.0.0.0:${PORT}`);
