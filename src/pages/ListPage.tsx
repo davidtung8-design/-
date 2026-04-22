@@ -13,11 +13,117 @@ interface ListPageProps {
 export const ListPage: React.FC<ListPageProps> = ({ perfData, setPerfData, isDarkMode }) => {
   const prospectInputRef = useRef<HTMLInputElement>(null);
   const recruitInputRef = useRef<HTMLInputElement>(null);
+  const vcfInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'prospect' | 'recruit'>('prospect');
   const [showOnlyPinned, setShowOnlyPinned] = useState(false);
 
-  // --- Search & Filter Logic ---
+  // --- Handlers ---
+  const handleImportVCF = (type: 'prospect' | 'recruit', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) return;
+
+      // Basic vCard parser
+      const contacts: { name: string, tel: string }[] = [];
+      let currentContact: { name?: string, tel?: string } = {};
+      
+      const lines = content.split(/\r?\n/);
+      lines.forEach(line => {
+        if (line.startsWith('BEGIN:VCARD')) currentContact = {};
+        if (line.startsWith('FN:')) currentContact.name = line.substring(3).trim();
+        if (line.startsWith('TEL')) {
+          const parts = line.split(':');
+          if (parts.length > 1) currentContact.tel = parts[1].trim();
+        }
+        if (line.startsWith('END:VCARD')) {
+          if (currentContact.name) {
+            contacts.push({ name: currentContact.name, tel: currentContact.tel || '' });
+          }
+        }
+      });
+
+      if (contacts.length === 0) {
+        alert('未在文件中检测到有效的联系人信息。');
+        return;
+      }
+
+      const newEntries = contacts.map(c => ({
+        name: c.name,
+        job: '',
+        isPinned: false,
+        ...(type === 'prospect' 
+          ? { plan: '', note: c.tel } 
+          : { interest: '0', followup: c.tel })
+      }));
+
+      setPerfData(prev => ({
+        ...prev,
+        [type === 'prospect' ? 'prospectList' : 'recruitList']: [
+          ...prev[type === 'prospect' ? 'prospectList' : 'recruitList'],
+          ...newEntries
+        ]
+      }));
+      alert(`已成功导入 ${contacts.length} 位联系人到 ${type === 'prospect' ? '准客户' : '准增员'} 列表。`);
+      if (e.target) e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportContacts = async (type: 'prospect' | 'recruit') => {
+    const isContactPickerSupported = 'contacts' in navigator && 'select' in (navigator as any).contacts;
+    
+    if (!isContactPickerSupported) {
+      const confirmVCF = confirm('您的浏览器不支持直接读取通讯录（通常是由于 iFrame 限制或浏览器版本过低）。\n\n您可以选择导入 .vCard (.vcf) 文件，这是从 iPhone 搬运联系人最稳妥的方法：\n1. 在手机通讯录选好人 -> 共享联系人 -> 存储到“文件”\n2. 在这里选择刚才存储的文件。\n\n是否现在选择 .vcf 文件进行导入？');
+      if (confirmVCF) {
+        vcfInputRef.current?.click();
+      }
+      return;
+    }
+
+    try {
+      const props = ['name', 'tel'];
+      const opts = { multiple: true };
+      const contacts = await (navigator as any).contacts.select(props, opts);
+      
+      if (contacts && contacts.length > 0) {
+        const newEntries = contacts.map((c: any) => {
+          let name = 'Unknown';
+          if (typeof c.name === 'string') name = c.name;
+          else if (Array.isArray(c.name) && c.name[0]) name = c.name[0];
+          
+          let tel = '';
+          if (typeof c.tel === 'string') tel = c.tel;
+          else if (Array.isArray(c.tel) && c.tel[0]) tel = c.tel[0];
+
+          return {
+            name,
+            job: '',
+            isPinned: false,
+            ...(type === 'prospect' 
+              ? { plan: '', note: tel } 
+              : { interest: '0', followup: tel })
+          };
+        });
+
+        setPerfData(prev => ({
+          ...prev,
+          [type === 'prospect' ? 'prospectList' : 'recruitList']: [
+            ...prev[type === 'prospect' ? 'prospectList' : 'recruitList'],
+            ...newEntries
+          ]
+        }));
+        alert(`已同步 ${newEntries.length} 位联系人。`);
+      }
+    } catch (err) { 
+      console.error('Contact select error:', err);
+      // Optional: don't alert on user cancel
+    }
+  };
   const currentList = activeTab === 'prospect' ? perfData.prospectList : perfData.recruitList;
   
   const pinnedEntries = currentList.filter(x => x.isPinned && x.name);
@@ -69,35 +175,6 @@ export const ListPage: React.FC<ListPageProps> = ({ perfData, setPerfData, isDar
       if (e.target) e.target.value = '';
     };
     reader.readAsText(file);
-  };
-
-  const handleImportContacts = async (type: 'prospect' | 'recruit') => {
-    if (!('contacts' in navigator && 'select' in (navigator as any).contacts)) {
-      alert('您的浏览器不支持直接访问通讯录。建议在手机 Safari 使用或导入 CSV。');
-      return;
-    }
-    try {
-      const props = ['name', 'tel'];
-      const opts = { multiple: true };
-      const contacts = await (navigator as any).contacts.select(props, opts);
-      if (contacts.length > 0) {
-        const newEntries = contacts.map((c: any) => ({
-          name: c.name?.[0] || 'Unknown',
-          job: '',
-          isPinned: false,
-          ...(type === 'prospect' 
-            ? { plan: '', note: c.tel?.[0] || '' } 
-            : { interest: '0', followup: c.tel?.[0] || '' })
-        }));
-        setPerfData(prev => ({
-          ...prev,
-          [type === 'prospect' ? 'prospectList' : 'recruitList']: [
-            ...prev[type === 'prospect' ? 'prospectList' : 'recruitList'].filter(x => x.name),
-            ...newEntries
-          ]
-        }));
-      }
-    } catch (err) { console.log(err); }
   };
 
   const addNew = (type: 'prospect' | 'recruit') => {
@@ -285,6 +362,7 @@ export const ListPage: React.FC<ListPageProps> = ({ perfData, setPerfData, isDar
       )}>
         <input type="file" ref={prospectInputRef} className="hidden" accept=".csv" onChange={(e) => handleImportCSV('prospect', e)} />
         <input type="file" ref={recruitInputRef} className="hidden" accept=".csv" onChange={(e) => handleImportCSV('recruit', e)} />
+        <input type="file" ref={vcfInputRef} className="hidden" accept=".vcf" onChange={(e) => handleImportVCF(activeTab, e)} />
 
         <div className="p-8 border-b border-slate-800/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div className="flex items-center gap-4">
