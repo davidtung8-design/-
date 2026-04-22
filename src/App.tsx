@@ -438,8 +438,8 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  const handleSyncAppleCalendar = useCallback(async () => {
-    // Filter only events from the current visible week (per HTML reference)
+  const handleSyncAppleCalendar = useCallback(() => {
+    // Filter only events from the current visible week (matching the working HTML reference)
     const currentWeekEvents = events.filter(e => e.weekOffset === viewOffset);
     
     if (currentWeekEvents.length === 0) {
@@ -447,48 +447,44 @@ export default function App() {
       return;
     }
 
-    // Generate RFC 5545 iCalendar content matching the verified HTML reference
+    // Generate RFC 5545 iCalendar content (Exact same logic as the working HTML provided by the user)
     const icsContent: string[] = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//David Tung//Time Matrix//EN',
+      'PRODID:-//David Tung Time Manager//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
-      'X-WR-CALNAME:David Tung Time Matrix',
+      'X-WR-CALNAME:David Tung 时间管理大师',
       'X-WR-TIMEZONE:Asia/Kuala_Lumpur'
     ];
 
     const pad = (n: number) => n.toString().padStart(2, '0');
-    const formatICSDateLocal = (date: Date, hour: number) => {
-      const y = date.getFullYear();
-      const m = pad(date.getMonth() + 1);
-      const d = pad(date.getDate());
-      const h = pad(hour);
-      return `${y}${m}${d}T${h}0000`; // Floating time (local)
+    
+    const formatDateForICS = (date: Date, hour: number) => {
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1);
+      const day = pad(date.getDate());
+      return `${year}${month}${day}T${pad(hour)}0000`; // Local floating time
     };
 
     currentWeekEvents.forEach(event => {
       const activity = ACTIVITIES.find(a => a.id === event.activityId);
-      const groupInfo = activity ? GROUP_CONFIG[activity.group as keyof typeof GROUP_CONFIG] : null;
       
       const monday = startOfWeek(baseDate, { weekStartsOn: 1 });
       const weekMonday = addWeeks(monday, event.weekOffset);
       const eventDate = addDays(weekMonday, event.weekday === 0 ? 6 : event.weekday - 1);
       
-      // DTSTAMP must be UTC
-      const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-      
-      // DTSTART/END use local floating time to match the HTML reference approach
-      const dtstart = formatICSDateLocal(eventDate, event.startHour);
-      const dtend = formatICSDateLocal(eventDate, event.endHour);
+      const dtstamp = formatDateForICS(new Date(), new Date().getHours());
+      const dtstart = formatDateForICS(eventDate, event.startHour);
+      const dtend = formatDateForICS(eventDate, event.endHour);
 
       icsContent.push('BEGIN:VEVENT');
-      icsContent.push(`UID:${event.id}@david-tung-core.run`);
+      icsContent.push(`UID:${event.id}@davidtung.com`);
       icsContent.push(`DTSTAMP:${dtstamp}`);
       icsContent.push(`DTSTART:${dtstart}`);
       icsContent.push(`DTEND:${dtend}`);
       icsContent.push(`SUMMARY:${activity?.icon || '📅'} ${event.title || activity?.name || 'Scheduled Slot'}`);
-      icsContent.push(`DESCRIPTION:Activity: ${activity?.name || 'General'}\\nGroup: ${groupInfo?.name || 'Matrix'}`);
+      icsContent.push(`DESCRIPTION:活动类型: ${activity?.name || 'General'}`);
       icsContent.push('END:VEVENT');
     });
 
@@ -496,28 +492,24 @@ export default function App() {
     const icsString = icsContent.join('\r\n');
     
     try {
-      showToast("正在准备同步当前周数据...");
+      showToast("正在导出当前周日历...");
       
-      const response = await fetch('/api/calendar/prepare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ icsContent: icsString })
-      });
+      // Pure client-side download logic (Verified to work in the user's provided HTML)
+      const blob = new Blob([icsString], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `david_tung_week_${new Date().toISOString().slice(0, 10)}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Sync Failed: ${errorText}`);
-      }
-      
-      const { id } = await response.json();
-      
-      // Step 2: Download the file
-      window.location.href = `/api/calendar/download/${id}.ics`;
-      showToast("✅ 已成功导出日历，请在手机上点击确认。");
+      showToast(`✅ 已成功导出当前周 ${currentWeekEvents.length} 个任务`);
       
     } catch (error) {
       console.error('Calendar sync error:', error);
-      alert('同步失败，请重试。' + (error instanceof Error ? error.message : ''));
+      alert('同步失败，请重试。');
     }
   }, [events, baseDate, viewOffset, showToast]);
 
