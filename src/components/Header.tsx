@@ -9,6 +9,7 @@ interface HeaderProps {
   theme: ThemeConfig;
   syncId: string;
   onSyncIdChange: (id: string) => void;
+  onGoogleLogin: () => void;
   isSyncing: boolean;
   onOpenCalendar: () => void;
   onQuickAdd: () => void;
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   theme,
   syncId,
   onSyncIdChange,
+  onGoogleLogin,
   isSyncing,
   onOpenCalendar,
   onQuickAdd,
@@ -59,10 +61,10 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 mr-2 bg-slate-800/40 p-1.5 rounded-2xl border border-slate-700 min-w-[140px]">
               <div className={cn(
-                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer hover:bg-blue-600/30",
                 isSyncing ? "bg-blue-500/20 text-blue-500 animate-pulse" : "bg-slate-700 text-slate-400"
-              )}>
-                {isSyncing ? <RefreshCw size={16} className="animate-spin" /> : <UserIcon size={16} />}
+              )} onClick={onGoogleLogin} title="Link with Google">
+                {isSyncing ? <RefreshCw size={16} className="animate-spin" /> : <span className="font-bold text-xs text-blue-400">G</span>}
               </div>
               <div className="flex flex-col flex-1">
                 {showSyncEdit ? (

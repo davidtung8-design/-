@@ -20,6 +20,8 @@ import {
 } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
+import { auth, signInWithGoogle } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { PerformancePage } from './pages/PerformancePage';
 import { ListPage } from './pages/ListPage';
 import { ActionPage3v6R } from './pages/ActionPage3v6R';
@@ -162,10 +164,21 @@ export default function App() {
 
     setEncouragement(ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]);
     
+    // Listen for Firebase Auth changes to auto-sync with email ID
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.email) {
+        setSyncId(user.email);
+        localStorage.setItem('dt_sync_id', user.email);
+        loadFromCloud(user.email);
+      }
+    });
+
     // Initial fetch from cloud if syncId exists
     if (syncId) {
       loadFromCloud(syncId);
     }
+
+    return () => unsubscribe();
   }, []);
 
   const loadFromCloud = async (id: string) => {
@@ -570,6 +583,19 @@ export default function App() {
           theme={theme}
           syncId={syncId}
           onSyncIdChange={setSyncId}
+          onGoogleLogin={async () => {
+            try {
+              const user = await signInWithGoogle();
+              if (user && user.email) {
+                setSyncId(user.email);
+                localStorage.setItem('dt_sync_id', user.email);
+                loadFromCloud(user.email);
+                showToast(`Linked: ${user.email}`);
+              }
+            } catch (e) {
+              console.error("Google Login Link Failed", e);
+            }
+          }}
           isSyncing={isSyncing}
           onOpenCalendar={() => setIsCalendarOpen(true)}
           onQuickAdd={() => {
