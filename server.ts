@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,8 +78,13 @@ async function startServer() {
     res.send(data.content);
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(distPath);
+
+  // Vite middleware for development or if production build is missing
+  if (!isProduction || !hasDist) {
+    console.log('Using Vite middleware...');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -86,7 +92,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // Production: serve static files from dist
-    const distPath = path.join(process.cwd(), 'dist');
+    console.log('Serving from dist...');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
