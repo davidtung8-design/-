@@ -22,11 +22,21 @@ export interface TodoItem {
   completed: boolean;
 }
 
+export interface ProtocolDetail {
+  id: string; // matches protocol ID ('a', 'b', etc.)
+  entries: {
+    title: string;
+    description: string;
+    subinfo?: string;
+  }[];
+}
+
 export interface DailyData {
   r: string; // reflection
   g: string; // gratitude
   sixTasks?: string[]; // 6 Most Important Things
   protocol5352111?: string[]; // Completed IDs for 5352111 Elite Protocol
+  protocolDetails?: Record<string, string[]>; // Detailed logs for each protocol ID ('a': ['John-At Cafe-Met via friend', ...])
 }
 
 export interface MonthlyRecord {

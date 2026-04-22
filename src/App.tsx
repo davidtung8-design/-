@@ -86,6 +86,7 @@ export default function App() {
   const theme = THEMES[themeKey] || THEMES.default;
 
   // --- Data States ---
+  const [syncId, setSyncId] = useState<string>(localStorage.getItem('dt_sync_id') || "");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todoItems, setTodoItems] = useState<Record<string, TodoItem[]>>({});
   const [dailyData, setDailyData] = useState<Record<string, DailyData>>({});
@@ -95,13 +96,14 @@ export default function App() {
   const [baseDate, setBaseDate] = useState(new Date());
 
   // --- UI States ---
-  const [user, setUser] = useState<User | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ day: number, hour: number, offset: number } | null>(null);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isTodoModalOpen, setIsTodoModalOpen] = useState(false);
+  const [isProtocolModalOpen, setIsProtocolModalOpen] = useState(false);
+  const [activeProtocolId, setActiveProtocolId] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isReflectionArchiveOpen, setIsReflectionArchiveOpen] = useState(false);
@@ -140,16 +142,6 @@ export default function App() {
 
   // --- Load Data ---
   useEffect(() => {
-    testConnection();
-    
-    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) {
-        // Clear states if logged out? Or keep local?
-        // For now, let's keep local but stop syncing
-      }
-    });
-
     const savedDarkMode = localStorage.getItem('dt_dark_mode');
     if (savedDarkMode !== null) setIsDarkMode(savedDarkMode === 'true');
 
@@ -175,127 +167,73 @@ export default function App() {
     if (savedSound) setAmbientSound(savedSound === 'true');
 
     setEncouragement(ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]);
-
-    return () => unsubscribeAuth();
+    
+    // Initial fetch from cloud if syncId exists
+    if (syncId) {
+      loadFromCloud(syncId);
+    }
   }, []);
 
-  // --- Cloud Sync ---
-  useEffect(() => {
-    if (!user) return;
-
+  const loadFromCloud = async (id: string) => {
+    if (!id) return;
     setIsSyncing(true);
-    const userDocRef = doc(db, 'users', user.uid);
-
-    // Sync Perf Data
-    const unsubPerf = onSnapshot(userDocRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const cloudData = snapshot.data() as PerfData;
-        setPerfData(prev => ({ ...prev, ...cloudData }));
-      } else {
-        // First login? Upload local data
-        const localPerf = localStorage.getItem('dt_perf');
-        if (localPerf) {
-          setDoc(userDocRef, JSON.parse(localPerf), { merge: true });
-        }
+    try {
+      const res = await fetch(`/api/sync/load?userId=${encodeURIComponent(id)}`);
+      const { data } = await res.json();
+      if (data) {
+        if (data.events) setEvents(data.events);
+        if (data.perfData) setPerfData(data.perfData);
+        if (data.todoItems) setTodoItems(data.todoItems);
+        if (data.dailyData) setDailyData(data.dailyData);
+        showToast("Matrix Cloud Sync: Success");
       }
+    } catch (e) {
+      console.error("Sync Load Failed", e);
+    } finally {
       setIsSyncing(false);
-    });
+    }
+  };
 
-    // Sync Events
-    const eventsColRef = collection(db, 'users', user.uid, 'events');
-    const unsubEvents = onSnapshot(eventsColRef, (snapshot) => {
-      const cloudEvents: CalendarEvent[] = [];
-      snapshot.forEach(doc => cloudEvents.push(doc.data() as CalendarEvent));
-      if (cloudEvents.length > 0) setEvents(cloudEvents);
-      else {
-        // Upload local events if cloud is empty
-        const localEvents = localStorage.getItem('dt_events');
-        if (localEvents) {
-          const eventsArr = JSON.parse(localEvents) as CalendarEvent[];
-          eventsArr.forEach(e => setDoc(doc(db, 'users', user.uid, 'events', e.id), e));
-        }
-      }
-    });
+  const saveToCloud = async () => {
+    if (!syncId) return;
+    setIsSyncing(true);
+    try {
+      await fetch('/api/sync/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: syncId,
+          data: { events, perfData, todoItems, dailyData }
+        })
+      });
+    } catch (e) {
+      console.error("Sync Save Failed", e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
-    // Sync Todos
-    const todosColRef = collection(db, 'users', user.uid, 'todos');
-    const unsubTodos = onSnapshot(todosColRef, (snapshot) => {
-      const cloudTodos: Record<string, TodoItem[]> = {};
-      snapshot.forEach(doc => cloudTodos[doc.id] = (doc.data() as any).items);
-      if (Object.keys(cloudTodos).length > 0) setTodoItems(cloudTodos);
-    });
-
-    // Sync Daily
-    const dailyColRef = collection(db, 'users', user.uid, 'daily');
-    const unsubDaily = onSnapshot(dailyColRef, (snapshot) => {
-      const cloudDaily: Record<string, DailyData> = {};
-      snapshot.forEach(doc => cloudDaily[doc.id] = doc.data() as DailyData);
-      if (Object.keys(cloudDaily).length > 0) setDailyData(cloudDaily);
-    });
-
-    return () => {
-      unsubPerf();
-      unsubEvents();
-      unsubTodos();
-      unsubDaily();
-    };
-  }, [user]);
-
-  // --- Save Data ---
+  // --- Auto Save to Local & Cloud ---
   useEffect(() => {
     localStorage.setItem('dt_events', JSON.stringify(events));
-    if (user) {
-      // Sync events is handled individually usually to avoid massive writes
-      // but for simplicity here we just ensure local matches
-    }
   }, [events]);
 
   useEffect(() => {
     localStorage.setItem('dt_perf', JSON.stringify(perfData));
-    if (user) {
-      setDoc(doc(db, 'users', user.uid), perfData, { merge: true });
-    }
-  }, [perfData, user]);
+  }, [perfData]);
 
   useEffect(() => {
     localStorage.setItem('dt_todos', JSON.stringify(todoItems));
-    if (user) {
-      // Update each date that changed
-      Object.entries(todoItems).forEach(([date, items]) => {
-        setDoc(doc(db, 'users', user.uid, 'todos', date), { items });
-      });
-    }
-  }, [todoItems, user]);
-
-  useEffect(() => {
-    localStorage.setItem('dt_dark_mode', isDarkMode.toString());
-    const body = document.body;
-    if (isDarkMode) {
-      body.classList.remove('light-mode');
-      body.style.setProperty('--card-bg', 'rgba(15, 15, 20, 0.5)');
-      body.style.backgroundColor = theme.bg;
-    } else {
-      body.classList.add('light-mode');
-      body.style.setProperty('--card-bg', '#ffffff');
-      body.style.backgroundColor = '#f8fafc'; // Premium Soft White/Gray
-    }
-  }, [isDarkMode, theme]);
-
-  useEffect(() => {
-    const body = document.body;
-    body.style.setProperty('--bg-color', isDarkMode ? theme.bg : '#f8fafc');
-    body.style.setProperty('--accent-color', theme.accent);
-    body.style.setProperty('--border-color', theme.border);
-  }, [theme, isDarkMode]);
+  }, [todoItems]);
 
   useEffect(() => {
     localStorage.setItem('dt_daily', JSON.stringify(dailyData));
-    if (user) {
-      Object.entries(dailyData).forEach(([date, data]) => {
-        setDoc(doc(db, 'users', user.uid, 'daily', date), data);
-      });
-    }
-  }, [dailyData, user]);
+  }, [dailyData]);
+
+  useEffect(() => {
+    localStorage.setItem('dt_sync_id', syncId);
+    if (syncId) saveToCloud();
+  }, [syncId, events, perfData, todoItems, dailyData]);
 
   useEffect(() => {
     localStorage.setItem('dt_theme', themeKey);
@@ -636,7 +574,9 @@ export default function App() {
       )}>
         <Header 
           theme={theme}
-          user={user}
+          syncId={syncId}
+          onSyncIdChange={setSyncId}
+          isSyncing={isSyncing}
           onOpenCalendar={() => setIsCalendarOpen(true)}
           onQuickAdd={() => {
             setSelectedSlot({ day: new Date().getDay(), hour: 9, offset: 0 });
@@ -648,9 +588,120 @@ export default function App() {
           onExportAll={() => {}}
           onSyncGoogle={() => {}}
           onExportReport={handleExportReport}
-          onSignIn={signInWithGoogle}
-          onSignOut={() => signOut(auth)}
         />
+
+        {/* Protocol Details Modal */}
+        <AnimatePresence>
+          {isProtocolModalOpen && activeProtocolId && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm bg-black/60">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className={cn(
+                  "w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 border overflow-hidden",
+                  isDarkMode ? "bg-slate-950 border-slate-800" : "bg-white border-slate-200"
+                )}
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-blue-500 text-white rounded-2xl shadow-lg shadow-blue-500/20">
+                      <Zap size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-[0.2em]">{
+                        activeProtocolId === 'a' ? '认识新朋友' :
+                        activeProtocolId === 'c' ? '打保户电话' :
+                        'Protocol Details'
+                      }</h3>
+                      <p className="text-[9px] text-slate-500 mt-1 uppercase font-medium">节点详细记录 · Detailed Log</p>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                    setIsProtocolModalOpen(false);
+                    setActiveProtocolId(null);
+                  }} className="p-2 hover:bg-slate-800/10 rounded-full transition-colors">
+                    <X size={20} className="text-slate-500" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2 mb-8">
+                  {(() => {
+                    const protocolDetails = dailyData[todayKey]?.protocolDetails?.[activeProtocolId] || ["", "", "", "", ""];
+                    // Ensure enough slots based on the val
+                    const requiredCount = 
+                      activeProtocolId === 'a' ? 5 : 
+                      activeProtocolId === 'b' ? 3 :
+                      activeProtocolId === 'c' ? 5 : 
+                      activeProtocolId === 'd' ? 2 : 1;
+                    
+                    const displayDetails = [...protocolDetails];
+                    while (displayDetails.length < requiredCount) displayDetails.push("");
+
+                    return displayDetails.map((detail, idx) => (
+                      <div key={idx} className="space-y-2">
+                        <div className="flex justify-between items-center text-[9px] font-bold text-slate-500 uppercase tracking-widest pl-4">
+                          <span>Node Entry {idx + 1}</span>
+                        </div>
+                        <textarea 
+                          className={cn(
+                            "w-full p-4 rounded-2xl border outline-none font-medium text-xs transition-all min-h-[60px]",
+                            isDarkMode 
+                              ? "bg-slate-900 border-slate-800 focus:border-blue-500 text-white" 
+                              : "bg-slate-50 border-slate-200 focus:border-blue-500 text-slate-900"
+                          )}
+                          placeholder={
+                            activeProtocolId === 'a' ? "姓名、地点、聊了什么内容..." :
+                            activeProtocolId === 'c' ? "对方姓名、通话要点、结果..." :
+                            "写下详细进展..."
+                          }
+                          value={detail}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDailyData(prev => {
+                              const current = prev[todayKey] || { r: "", g: "", sixTasks: ["", "", "", "", "", ""], protocol5352111: [], protocolDetails: {} };
+                              const details = { ...(current.protocolDetails || {}) };
+                              const list = [...(details[activeProtocolId] || [])];
+                              while (list.length < requiredCount) list.push("");
+                              list[idx] = val;
+                              details[activeProtocolId] = list;
+                              
+                              // Automatically check off protocol if at least one entry has content
+                              const protocol = [...(current.protocol5352111 || [])];
+                              // If any entry is not empty, and protocol id not in list, add it
+                              const hasContent = list.some(d => d.trim());
+                              let newProtocol = protocol;
+                              if (hasContent && !protocol.includes(activeProtocolId)) {
+                                newProtocol = [...protocol, activeProtocolId];
+                              }
+
+                              return {
+                                ...prev,
+                                [todayKey]: { ...current, protocolDetails: details, protocol5352111: newProtocol }
+                              };
+                            });
+                          }}
+                        />
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => {
+                      setIsProtocolModalOpen(false);
+                      setActiveProtocolId(null);
+                    }}
+                    className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-500/30 active:scale-95 transition-all"
+                  >
+                    Confirm & Sync Node
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {currentPage === 'home' && (
           <div className={cn(
@@ -727,15 +778,31 @@ export default function App() {
                         )}
                         
                         <div className="flex justify-between items-start mb-3 relative z-10">
-                          <div className={cn(
-                            "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300",
-                            isCompleted 
-                              ? "bg-blue-500 border-blue-500 text-white" 
-                              : "border-slate-400 bg-transparent text-transparent"
-                          )}>
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveProtocolId(item.id);
+                              setIsProtocolModalOpen(true);
+                            }}
+                            className={cn(
+                              "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300",
+                              isCompleted 
+                                ? "bg-blue-500 border-blue-500 text-white" 
+                                : "border-slate-400 bg-transparent text-transparent"
+                            )}
+                          >
                             <CheckCircle2 size={14} className={isCompleted ? "opacity-100 scale-100" : "opacity-0 scale-50"} />
                           </div>
-                          {!isCompleted && <span className="text-[7px] font-bold text-blue-500/50 uppercase tracking-tighter">Click to check</span>}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveProtocolId(item.id);
+                              setIsProtocolModalOpen(true);
+                            }}
+                            className="text-[7px] font-bold text-blue-500 uppercase tracking-widest hover:underline"
+                          >
+                            {isCompleted ? "Edit Details" : "Add Details"}
+                          </button>
                           <span className="text-[9px] font-mono text-slate-500 uppercase font-bold">{item.val} qty</span>
                         </div>
                         

@@ -196,27 +196,71 @@ export const ListPage: React.FC<ListPageProps> = ({ perfData, setPerfData, isDar
       const content = event.target?.result as string;
       if (!content) return;
 
-      // Better CSV handling to avoid empty results on simple formats
       const rows = content.split(/\r?\n/).filter(row => row.trim());
-      const newEntries = rows.map(row => {
-        // Try multiple separators
-        let item: string[] = [];
-        if (row.includes(',')) item = row.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        else if (row.includes('\t')) item = row.split('\t').map(c => c.trim());
-        else item = [row.trim()];
+      if (rows.length === 0) return;
+
+      // 1. Detect Delimiter
+      const firstLine = rows[0];
+      const delimiters = [',', ';', '\t', '|'];
+      const delimiterCounts = delimiters.map(d => ({
+        delimiter: d,
+        count: (firstLine.match(new RegExp(`\\${d}`, 'g')) || []).length
+      }));
+      const bestDelimiter = delimiterCounts.reduce((prev, curr) => curr.count > prev.count ? curr : prev, { delimiter: ',', count: 0 }).delimiter;
+
+      // 2. Parse Rows helper
+      const parseRow = (line: string) => {
+        const parts: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === bestDelimiter && !inQuotes) {
+            parts.push(current.trim().replace(/^["']|["']$/g, ''));
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        parts.push(current.trim().replace(/^["']|["']$/g, ''));
+        return parts;
+      };
+
+      const parsedRows = rows.map(parseRow);
+      const headers = parsedRows[0].map(h => h.toLowerCase());
+
+      // 3. Map Columns
+      const mapping = {
+        name: headers.findIndex(h => h.includes('name') || h.includes('姓名') || h.includes('名字')),
+        job: headers.findIndex(h => h.includes('job') || h.includes('industry') || h.includes('role') || h.includes('occupation') || h.includes('行业') || h.includes('职业')),
+        extra: headers.findIndex(h => h.includes('plan') || h.includes('target') || h.includes('计划') || h.includes('interest') || h.includes('score') || h.includes('分数')),
+        log: headers.findIndex(h => h.includes('note') || h.includes('log') || h.includes('history') || h.includes('tel') || h.includes('phone') || h.includes('备注') || h.includes('记录') || h.includes('电话'))
+      };
+
+      // If no definitive headers found, default to index mapping
+      const dataRows = (mapping.name === -1 && mapping.job === -1) ? parsedRows : parsedRows.slice(1);
+      
+      const newEntries = dataRows.map(row => {
+        const name = mapping.name !== -1 ? row[mapping.name] : row[0];
+        const job = mapping.job !== -1 ? row[mapping.job] : row[1];
+        const extraValue = mapping.extra !== -1 ? row[mapping.extra] : row[2];
+        const logValue = mapping.log !== -1 ? row[mapping.log] : row[3];
 
         return {
-          name: item[0] || '',
-          job: item[1] || '',
+          name: name || '',
+          job: job || '',
           isPinned: false,
           ...(type === 'prospect' 
-            ? { plan: item[2] || '', note: item[3] || '' } 
-            : { interest: item[2] || '0', followup: item[3] || '' })
+            ? { plan: extraValue || '', note: logValue || '' } 
+            : { interest: extraValue || '0', followup: logValue || '' })
         };
-      }).filter(x => x.name);
+      }).filter(x => x.name && x.name !== 'name' && x.name !== '姓名');
 
       if (newEntries.length === 0) {
-        alert('导入失败：未在文件中找到有效数据，请检查 CSV 格式。');
+        alert('导入失败：未在文件中找到有效数据。请确保 CSV 包含姓名/Name 列。');
         return;
       }
 
@@ -227,7 +271,7 @@ export const ListPage: React.FC<ListPageProps> = ({ perfData, setPerfData, isDar
           ...newEntries
         ]
       }));
-      alert(`CSV 导入成功：已同步 ${newEntries.length} 条记录。`);
+      alert(`CSV 导入成功（检测到分隔符: "${bestDelimiter}"）：已同步 ${newEntries.length} 条记录。`);
       if (e.target) e.target.value = '';
     };
     reader.onerror = () => alert('读取文件失败，请重试。');

@@ -38,6 +38,26 @@ async function startServer() {
     });
   });
 
+  // --- Matrix Data Sync API ---
+  const dataStore = new Map<string, { data: any, timestamp: number }>();
+
+  app.post('/api/sync/save', (req, res) => {
+    const { userId, data } = req.body;
+    if (!userId || !data) return res.status(400).json({ error: 'Missing userId or data' });
+    
+    dataStore.set(userId, { data, timestamp: Date.now() });
+    console.log(`[Sync] Data saved for: ${userId}`);
+    res.json({ success: true });
+  });
+
+  app.get('/api/sync/load', (req, res) => {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+    
+    const entry = dataStore.get(userId as string);
+    res.json({ data: entry ? entry.data : null });
+  });
+
   // API: Prepare Calendar
   app.post('/api/calendar/prepare', (req, res) => {
     const { icsContent } = req.body;
@@ -77,6 +97,8 @@ async function startServer() {
     res.setHeader('Content-Disposition', 'attachment; filename="david_tung_matrix.ics"');
     res.send(data.content);
   });
+
+  const distPath = path.join(process.cwd(), 'dist');
 
   // Fallback: Serve static files from dist if they exist, otherwise use Vite
   if (fs.existsSync(distPath)) {

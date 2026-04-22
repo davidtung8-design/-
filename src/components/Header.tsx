@@ -7,7 +7,9 @@ import { User } from 'firebase/auth';
 
 interface HeaderProps {
   theme: ThemeConfig;
-  user: User | null;
+  syncId: string;
+  onSyncIdChange: (id: string) => void;
+  isSyncing: boolean;
   onOpenCalendar: () => void;
   onQuickAdd: () => void;
   onExport: () => void;
@@ -16,13 +18,13 @@ interface HeaderProps {
   onExportAll: () => void;
   onSyncGoogle: () => void;
   onExportReport: () => void;
-  onSignIn: () => void;
-  onSignOut: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   theme,
-  user,
+  syncId,
+  onSyncIdChange,
+  isSyncing,
   onOpenCalendar,
   onQuickAdd,
   onExport,
@@ -30,13 +32,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSyncIcal,
   onExportAll,
   onSyncGoogle,
-  onExportReport,
-  onSignIn,
-  onSignOut
+  onExportReport
 }) => {
   const currentDate = new Date();
-  const [showHelp, setShowHelp] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [showSyncEdit, setShowSyncEdit] = useState(!syncId);
   
   const currentDomain = window.location.hostname;
 
@@ -95,49 +94,39 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         
         <div className="flex items-center gap-2">
-           {user ? (
-             <div className="flex items-center gap-2 mr-2 bg-slate-800/40 p-1 pr-3 rounded-2xl border border-slate-700">
-               {user.photoURL ? (
-                 <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-xl border border-slate-700" referrerPolicy="no-referrer" />
-               ) : (
-                 <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center text-slate-400">
-                   <UserIcon size={16} />
-                 </div>
-               )}
-               <div className="flex flex-col">
-                 <span className="text-[10px] text-slate-300 font-bold truncate max-w-[80px]">{user.displayName || 'Agent'}</span>
-                 <button onClick={onSignOut} className="text-[8px] text-blue-400 hover:text-blue-300 uppercase tracking-tighter text-left">Logout</button>
-               </div>
-             </div>
-           ) : (
-             <div className="flex items-center gap-1 mr-2 relative z-[9999]" onClick={(e) => e.stopPropagation()}>
-               <button 
-                 onClick={(e) => {
-                   e.preventDefault();
-                   e.stopPropagation();
-                   console.log("Login sequence triggered");
-                   onSignIn();
-                 }}
-                 className="flex items-center gap-2 px-6 h-14 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-500 active:scale-95 active:bg-blue-700 transition-all shadow-xl shadow-blue-900/40 cursor-pointer border-2 border-white/20 select-none"
-                 style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-               >
-                 <LogIn size={20} />
-                 <span>Login Sync</span>
-               </button>
-               <button 
-                 onClick={(e) => {
-                   e.preventDefault();
-                   e.stopPropagation();
-                   setShowHelp(!showHelp);
-                 }}
-                 className="w-14 h-14 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center border border-slate-700 hover:text-blue-400 active:scale-95 transition-all cursor-pointer select-none"
-               >
-                 <HelpCircle size={24} />
-               </button>
-             </div>
-           )}
+            <div className="flex items-center gap-2 mr-2 bg-slate-800/40 p-1.5 rounded-2xl border border-slate-700 min-w-[140px]">
+              <div className={cn(
+                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                isSyncing ? "bg-blue-500/20 text-blue-500 animate-pulse" : "bg-slate-700 text-slate-400"
+              )}>
+                {isSyncing ? <RefreshCw size={16} className="animate-spin" /> : <UserIcon size={16} />}
+              </div>
+              <div className="flex flex-col flex-1">
+                {showSyncEdit ? (
+                  <input 
+                    autoFocus
+                    className="bg-transparent text-[10px] text-white font-bold outline-none border-b border-blue-500/50 w-full placeholder:text-slate-600"
+                    placeholder="Enter Sync ID"
+                    onBlur={() => syncId && setShowSyncEdit(false)}
+                    value={syncId}
+                    onChange={(e) => onSyncIdChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && syncId && setShowSyncEdit(false)}
+                  />
+                ) : (
+                  <span 
+                    onClick={() => setShowSyncEdit(true)}
+                    className="text-[10px] text-slate-300 font-bold truncate max-w-[80px] cursor-pointer hover:text-blue-400"
+                  >
+                    {syncId || 'Anonymous'}
+                  </span>
+                )}
+                <span className="text-[8px] text-slate-500 uppercase tracking-tighter">
+                  {isSyncing ? 'Synchronizing...' : 'Cloud Master Sync'}
+                </span>
+              </div>
+            </div>
 
-           <button 
+            <button 
              onClick={onSyncIcal}
              className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-500 flex items-center justify-center border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-900/20 group"
              title="一键同步 Apple 日历 (Sync Apple Calendar)"
