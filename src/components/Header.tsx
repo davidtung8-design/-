@@ -8,7 +8,9 @@ import { cn } from '../lib/utils';
 interface HeaderProps {
   theme: ThemeConfig;
   syncId: string;
+  syncKey: string;
   onSyncIdChange: (id: string) => void;
+  onSyncKeyChange: (key: string) => void;
   onAuthClick: () => void;
   isLoggedIn: boolean;
   userEmail?: string;
@@ -27,7 +29,9 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   theme,
   syncId,
+  syncKey,
   onSyncIdChange,
+  onSyncKeyChange,
   onAuthClick,
   isLoggedIn,
   userEmail,
@@ -76,27 +80,38 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {isSyncing ? <RefreshCw size={16} className="animate-spin" /> : <UserIcon size={16} />}
               </div>
-              <div className="flex flex-col flex-1">
+               <div className="flex flex-col flex-1">
                 {showSyncEdit ? (
-                  <input 
-                    autoFocus
-                    className="bg-transparent text-[10px] text-white font-bold outline-none border-b border-blue-500/50 w-full placeholder:text-slate-600"
-                    placeholder="Enter Sync ID"
-                    onBlur={() => syncId && setShowSyncEdit(false)}
-                    value={syncId}
-                    onChange={(e) => onSyncIdChange(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && syncId && setShowSyncEdit(false)}
-                  />
+                  <div className="flex flex-col gap-1 pr-2">
+                    <input 
+                      autoFocus
+                      className="bg-transparent text-[10px] text-white font-bold outline-none border-b border-blue-500/50 w-full placeholder:text-slate-600"
+                      placeholder="Account ID (Sync ID)"
+                      onBlur={() => syncId && !showSyncEdit}
+                      value={syncId}
+                      onChange={(e) => onSyncIdChange(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && setShowSyncEdit(false)}
+                    />
+                    <input 
+                      className="bg-transparent text-[9px] text-blue-400 font-medium outline-none border-b border-white/10 w-full placeholder:text-slate-600"
+                      placeholder="Secret Key (Password)"
+                      type="password"
+                      value={syncKey}
+                      onChange={(e) => onSyncKeyChange(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && setShowSyncEdit(false)}
+                    />
+                  </div>
                 ) : (
                   <span 
                     onClick={() => setShowSyncEdit(true)}
-                    className="text-[10px] text-slate-300 font-bold truncate max-w-[80px] cursor-pointer hover:text-blue-400"
+                    className="text-[10px] text-slate-300 font-bold truncate max-w-[80px] cursor-pointer hover:text-blue-400 group"
                   >
-                    {isLoggedIn ? userEmail : (syncId || 'Anonymous')}
+                    {isLoggedIn ? userEmail : (syncId || 'Local-Only')}
+                    {syncId && <span className="ml-1 opacity-0 group-hover:opacity-100 text-[8px] text-blue-500">Edit</span>}
                   </span>
                 )}
                 <span className="text-[8px] text-slate-500 uppercase tracking-tighter">
-                  {isSyncing ? 'Synchronizing...' : 'Cloud Master Sync'}
+                  {isSyncing ? 'Synchronizing...' : (syncId ? 'Cloud Sync Active' : 'Data Saved Locally')}
                 </span>
               </div>
             </div>

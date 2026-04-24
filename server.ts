@@ -4,9 +4,19 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import admin from 'firebase-admin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin
+// In AI Studio Cloud Run, it should auto-detect project ID but we'll try to be explicit from config
+const firebaseConfig = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'firebase-applet-config.json'), 'utf-8'));
+admin.initializeApp({
+  projectId: firebaseConfig.projectId,
+});
+const firestore = admin.firestore();
+const SYNC_COLLECTION = 'user_sync_data';
 
 async function startServer() {
   const app = express();
@@ -38,24 +48,57 @@ async function startServer() {
     });
   });
 
-  // --- Matrix Data Sync API ---
-  const dataStore = new Map<string, { data: any, timestamp: number }>();
-
-  app.post('/api/sync/save', (req, res) => {
-    const { userId, data } = req.body;
+  // --- Matrix Data Sync API (Firestore Persisted) ---
+  app.post('/api/sync/save', async (req, res) => {
+    const { userId, data, secretKey } = req.body;
     if (!userId || !data) return res.status(400).json({ error: 'Missing userId or data' });
     
-    dataStore.set(userId, { data, timestamp: Date.now() });
-    console.log(`[Sync] Data saved for: ${userId}`);
-    res.json({ success: true });
+    try {
+      const docRef = firestore.collection(SYNC_COLLECTION).doc(userId);
+      const doc = await docRef.get();
+
+      // Simple password protection: if doc exists and has a key, must match
+      if (doc.exists) {
+        const existingData = doc.data();
+        if (existingData?.secretKey && existingData.secretKey !== secretKey) {
+          return res.status(403).json({ error: 'Sync ID 密码错误 (Invalid Secret Key)' });
+        }
+      }
+
+      await docRef.set({
+        data,
+        secretKey: secretKey || null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        userId
+      });
+
+      console.log(`[Sync] Data persisted to Firestore for: ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('[Sync] Save Error:', error);
+      res.status(500).json({ error: 'Server persistence error' });
+    }
   });
 
-  app.get('/api/sync/load', (req, res) => {
-    const { userId } = req.query;
+  app.get('/api/sync/load', async (req, res) => {
+    const { userId, secretKey } = req.query;
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
     
-    const entry = dataStore.get(userId as string);
-    res.json({ data: entry ? entry.data : null });
+    try {
+      const doc = await firestore.collection(SYNC_COLLECTION).doc(userId as string).get();
+      if (!doc.exists) return res.json({ data: null });
+
+      const entry = doc.data();
+      // Check password if set
+      if (entry?.secretKey && entry.secretKey !== secretKey) {
+        return res.status(403).json({ error: 'Sync ID 验证失败，请输入正确密码' });
+      }
+
+      res.json({ data: entry?.data || null });
+    } catch (error) {
+      console.error('[Sync] Load Error:', error);
+      res.status(500).json({ error: 'Server load error' });
+    }
   });
 
   // API: Prepare Calendar

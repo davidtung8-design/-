@@ -84,6 +84,7 @@ export default function App() {
 
   // --- Data States ---
   const [syncId, setSyncId] = useState<string>(localStorage.getItem('dt_sync_id') || "");
+  const [syncKey, setSyncKey] = useState<string>(localStorage.getItem('dt_sync_key') || "");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todoItems, setTodoItems] = useState<Record<string, TodoItem[]>>({});
   const [dailyData, setDailyData] = useState<Record<string, DailyData>>({});
@@ -165,6 +166,9 @@ export default function App() {
     const savedSound = localStorage.getItem('dt_sound');
     if (savedSound) setAmbientSound(savedSound === 'true');
 
+    const savedSyncKey = localStorage.getItem('dt_sync_key');
+    if (savedSyncKey) setSyncKey(savedSyncKey);
+
     setEncouragement(ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]);
     
     // Handle redirect result (for mobile Safari)
@@ -179,35 +183,40 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser && currentUser.email) {
+        // If logged in via Google/Email, use that as Sync ID automatically
         setSyncId(currentUser.email);
         localStorage.setItem('dt_sync_id', currentUser.email);
-        loadFromCloud(currentUser.email);
-      } else if (!currentUser) {
-        // Option: reset syncId on logout if keeping strictly authenticated
-        // setSyncId(""); 
+        loadFromCloud(currentUser.email, syncKey);
       }
     });
 
     // Initial fetch from cloud if syncId exists
     if (syncId) {
-      loadFromCloud(syncId);
+      loadFromCloud(syncId, syncKey);
     }
 
     return () => unsubscribe();
   }, []);
 
-  const loadFromCloud = async (id: string) => {
+  const loadFromCloud = async (id: string, key?: string) => {
     if (!id) return;
     setIsSyncing(true);
     try {
-      const res = await fetch(`/api/sync/load?userId=${encodeURIComponent(id)}`);
-      const { data } = await res.json();
+      const res = await fetch(`/api/sync/load?userId=${encodeURIComponent(id)}&secretKey=${encodeURIComponent(key || "")}`);
+      const result = await res.json();
+      
+      if (res.status === 403) {
+        showToast(result.error || "Password Mismatch");
+        return;
+      }
+
+      const data = result.data;
       if (data) {
         if (data.events) setEvents(data.events);
         if (data.perfData) setPerfData(data.perfData);
         if (data.todoItems) setTodoItems(data.todoItems);
         if (data.dailyData) setDailyData(data.dailyData);
-        showToast("Matrix Cloud Sync: Success");
+        showToast("Master Cloud: Data Loaded");
       }
     } catch (e) {
       console.error("Sync Load Failed", e);
@@ -216,18 +225,26 @@ export default function App() {
     }
   };
 
-  const saveToCloud = async () => {
-    if (!syncId) return;
+  const saveToCloud = async (id?: string, key?: string) => {
+    const targetId = id || syncId;
+    const targetKey = key || syncKey;
+    if (!targetId) return;
+    
     setIsSyncing(true);
     try {
-      await fetch('/api/sync/save', {
+      const res = await fetch('/api/sync/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: syncId,
+          userId: targetId,
+          secretKey: targetKey,
           data: { events, perfData, todoItems, dailyData }
         })
       });
+      const result = await res.json();
+      if (res.status === 403) {
+        showToast(result.error);
+      }
     } catch (e) {
       console.error("Sync Save Failed", e);
     } finally {
@@ -263,8 +280,9 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('dt_sync_id', syncId);
+    localStorage.setItem('dt_sync_key', syncKey);
     if (syncId) saveToCloud();
-  }, [syncId, events, perfData, todoItems, dailyData]);
+  }, [syncId, syncKey, events, perfData, todoItems, dailyData]);
 
   useEffect(() => {
     localStorage.setItem('dt_theme', themeKey);
@@ -606,14 +624,24 @@ export default function App() {
         <Header 
           theme={theme}
           syncId={syncId}
+          syncKey={syncKey}
           onSyncIdChange={setSyncId}
-          onAuthClick={() => setIsAuthModalOpen(true)}
+          onSyncKeyChange={setSyncKey}
+          onAuthClick={() => {
+            if (syncId) loadFromCloud(syncId, syncKey);
+            else showToast("请输入 Sync ID 与密码 (Sync ID & Key required)");
+          }}
           isLoggedIn={!!user}
           userEmail={user?.email || undefined}
           onLogout={async () => {
              try {
                await logout();
-               showToast("Logged out");
+               setUser(null);
+               setSyncId("");
+               setSyncKey("");
+               localStorage.removeItem('dt_sync_id');
+               localStorage.removeItem('dt_sync_key');
+               showToast("Logged out & Cleared");
              } catch (e) {
                console.error("Logout failed", e);
              }
@@ -632,12 +660,15 @@ export default function App() {
           onExportReport={handleExportReport}
         />
 
-        <AuthModal 
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          isDarkMode={isDarkMode}
-          showToast={showToast}
-        />
+        {/* AuthModal is now legacy, using direct Sync ID in Header */}
+        {isAuthModalOpen && (
+          <AuthModal 
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            isDarkMode={isDarkMode}
+            showToast={showToast}
+          />
+        )}
 
         {/* Protocol Details Modal */}
         <AnimatePresence>
