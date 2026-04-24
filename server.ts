@@ -15,7 +15,7 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'f
 admin.initializeApp({
   projectId: firebaseConfig.projectId,
 });
-const firestore = admin.firestore();
+const firestore = admin.firestore(firebaseConfig.firestoreDatabaseId);
 const SYNC_COLLECTION = 'user_sync_data';
 
 async function startServer() {
@@ -40,9 +40,18 @@ async function startServer() {
   }, 60000);
 
   // API: Health Check
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', async (req, res) => {
+    let dbStatus = 'waiting';
+    try {
+      await firestore.collection(SYNC_COLLECTION).limit(1).get();
+      dbStatus = 'connected';
+    } catch (e) {
+      dbStatus = `error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+
     res.json({ 
       status: 'ok', 
+      database: dbStatus,
       uptime: process.uptime(),
       storeSize: calendarStore.size
     });

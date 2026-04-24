@@ -274,10 +274,12 @@ export default function App() {
       if (res.status === 403) {
         showToast("同步已锁定：密码不匹配 (Access Denied: Key Mismatch)");
       } else {
+        showToast("☁️ 已自动同步到云端 (Auto-Synced)");
         console.log("Auto-save successful");
       }
     } catch (e) {
       console.error("Sync Save Failed", e);
+      showToast("同步失败: " + (e instanceof Error ? e.message : "网络错误"));
     } finally {
       setIsSyncing(false);
     }
