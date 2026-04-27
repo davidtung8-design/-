@@ -1,0 +1,41 @@
+{
+  "name": "DT 时间管理大师",
+  "short_name": "时间大师",
+  "description": "顶级时间管理与业绩追踪系统，3V6R行动量化 + GSPC业绩看板",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0a0a0c",
+  "theme_color": "#D4AF37",
+  "lang": "zh-Hans",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "今日行动 3V6R",
+      "short_name": "3V6R",
+      "url": "/?page=3v6r",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "业绩看板",
+      "short_name": "业绩",
+      "url": "/?page=perf",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
+    }
+  ]
+}

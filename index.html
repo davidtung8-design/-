@@ -1,27 +1,54 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hans">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- ═══ iPhone/iPad Viewport (关键：不禁用缩放，但设置初始为1) ═══ -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- ═══ PWA / iOS 主屏安装 meta tags ═══ -->
+    <!-- 让 App 以全屏模式运行（无 Safari UI）-->
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- 状态栏颜色：black-translucent 让内容延伸到刘海区域 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="DT 2026" />
-    <meta name="theme-color" content="#991b1b" />
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- 主屏图标名称 -->
+    <meta name="apple-mobile-web-app-title" content="时间大师" />
+    <!-- 主屏触控图标 -->
+    <link rel="apple-touch-icon" href="/icon-512.png" />
+    <!-- 也为标准 Android PWA 添加图标 -->
+    <link rel="icon" type="image/png" href="/icon.png" />
+    
+    <!-- ═══ PWA Manifest ═══ -->
     <link rel="manifest" href="/manifest.json" />
-    <title>David Tung 时间管理大师 2026</title>
+    
+    <!-- ═══ Theme Color（地址栏 / 状态栏颜色）═══ -->
+    <meta name="theme-color" content="#0a0a0c" />
+    
+    <!-- ═══ 防止 iOS 自动电话号码识别 ═══ -->
+    <meta name="format-detection" content="telephone=no" />
+    
+    <title>DT 时间管理大师 2026</title>
+    
+    <!-- ═══ Service Worker 注册 ═══ -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[SW] Registered:', reg.scope))
+            .catch(err => console.warn('[SW] Registration failed:', err));
+          
+          // 监听 SW 消息（离线队列触发）
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type === 'PROCESS_SYNC_QUEUE') {
+              window.dispatchEvent(new CustomEvent('dt-process-sync-queue'));
+            }
+          });
+        });
+      }
+    </script>
   </head>
   <body>
-    <div id="root">
-      <div style="height: 100vh; display: flex; align-items: center; justify-content: center; background: #0A0A0C; color: #3b82f6; font-family: sans-serif; flex-direction: column; gap: 20px;">
-        <div style="width: 40px; height: 40px; border: 4px solid #1e293b; border-top-color: #3b82f6; border-radius: 50%; animate: spin 1s linear infinite;"></div>
-        <style>
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-        <p style="text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: bold;">Syncing Matrix 2026...</p>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

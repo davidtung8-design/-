@@ -127,6 +127,94 @@
   background: #2d2d3a;
   border-radius: 10px;
 }
-::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {* {
+  touch-action: manipulation;
+}
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+@media all and (display-mode: standalone) {
+  .app-header {
+    padding-top: max(16px, var(--safe-top));
+  }
+}
+.tab-bar-safe {
+  padding-bottom: var(--safe-bottom);
+}
+button, 
+.no-select,
+.calendar-slot,
+.activity-chip {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.scrollable,
+.page-content,
+main {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+input, textarea, select {
+  font-size: 16px !important; /* iOS 要求 ≥ 16px 才不缩放 */
+}
+
+@media (min-width: 768px) {
+  .bottom-tab-bar {
+    display: none !important; /* iPad 使用 Sidebar，隐藏底部栏 */
+  }
+}
+
+@media (max-width: 767px) {
+  .sidebar {
+    display: none !important; /* iPhone 隐藏侧边栏 */
+  }
+}
+.pull-to-refresh-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  font-size: 12px;
+  color: #888;
+  gap: 8px;
+}
+
+.pull-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: #D4AF37;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ──────────────────────────────────────
+   8. 活跃状态视觉反馈（按钮按下效果）
+   ────────────────────────────────────── */
+button:active,
+.pressable:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+  transition: transform 0.08s, opacity 0.08s;
+}
+@media (max-width: 390px) {
+  .text-xs { font-size: 10px; }
+  .card-value { font-size: 18px; }
+}
+
+@media all and (display-mode: standalone) {
+  body {
+    background-color: #0a0a0c; /* 与 manifest.json background_color 一致 */
+  }
+}
+
   background: #3d3d4a;
 }
